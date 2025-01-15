@@ -8,7 +8,7 @@
 
 题目叫做愿望清单，代码如下：
 
-![1](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/1.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/1.png)
 
 **漏洞解析** ：
 
@@ -20,19 +20,19 @@
 >
 >**定义** ： `bool in_array ( mixed $needle , array $haystack [, bool $strict = FALSE ] )` 
 >
->在 **$haystack** 中搜索 **$needle** ，如果第三个参数 **$strict** 的值为 **TRUE** ，则 **in_array()** 函数会进行强检查，检查 **$needle** 的类型是否和 **$haystack** 中的相同。如果找到 **$haystack** ，则返回 **TRUE**，否则返回 **FALSE**。
+>在 **\$haystack** 中搜索 **\$needle** ，如果第三个参数 **\$strict** 的值为 **TRUE** ，则 **in_array()** 函数会进行强检查，检查 **\$needle** 的类型是否和 **\$haystack** 中的相同。如果找到 **\$haystack** ，则返回 **TRUE**，否则返回 **FALSE**。
 
 ## 实例分析
 
-本次实例分析，我们选取的是 **piwigo2.7.1** 版本。该版本由于SQL语句直接拼接 **$rate** 变量，而 **$rate** 变量也仅是用 **in_array()** 函数简单处理，并未使用第三个参数进行严格匹配，最终导致sql注入漏洞发生。下面我们来看看具体的漏洞位置。漏洞的入口文件在 **include\functions_rate.inc.php** 中，具体代码如下：
+本次实例分析，我们选取的是 **piwigo2.7.1** 版本。该版本由于SQL语句直接拼接 **\$rate** 变量，而 **\$rate** 变量也仅是用 **in_array()** 函数简单处理，并未使用第三个参数进行严格匹配，最终导致sql注入漏洞发生。下面我们来看看具体的漏洞位置。漏洞的入口文件在 **include\functions_rate.inc.php** 中，具体代码如下：
 
-![2](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/2.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/2.png)
 
-当 **$_GET['action']** 为 **rate** 的时候，就会调用文件 **include/functions_rate.inc.php** 中的 **rate_picture** 方法，而漏洞便存在这个方法中。我们可以看到下图第23行处直接拼接 **$rate** 变量，而在第2行使用 **in_array()** 函数对 **$rate** 变量进行检测，判断 **$rate** 是否在 **$conf['rate_items']** 中， **$conf['rate_items']** 的内容可以在 **include\config_default.inc.php** 中找到，为 `$conf['rate_items'] = array(0,1,2,3,4,5);` 
+当 $\_GET['action']$ 为 **\$rate**"** 的时候，就会调用文件 **include/functions\_rate.inc.php** 中的 **rate_picture** 方法，而漏洞便存在这个方法中。我们可以看到下图第23行处直接拼接 **\$rate**变量，而在第2行使用 **in_array()** 函数对 **\$rate** 变量进行检测，判断**\$rate** 是否在 **\$conf['rate_items']** 中，**\$conf['rate_items']** 的内容可以在 **include\config_default.inc.php** 中找到，为 `$conf['rate_items'] = array(0,1,2,3,4,5);` 
 
-![3](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/3.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/3.png)
 
-由于这里（上图第6行）并没有将 **in_array()** 函数的第三个参数设置为 **true** ，所以会进行弱比较，可以绕过。比如我们将 **$rate** 的值设置成 **1,1 and if(ascii(substr((select database()),1,1))=112,1,sleep(3)));#** 那么SQL语句就变成：
+由于这里（上图第6行）并没有将 **in_array()** 函数的第三个参数设置为 **true** ，所以会进行弱比较，可以绕过。比如我们将 **\$rate** 的值设置成 **1,1 and if(ascii(substr((select database()),1,1))=112,1,sleep(3)));#** 那么SQL语句就变成：
 
 ```sql
 INSERT INTO piwigo_rate (user_id,anonymous_id,element_id,rate,date) VALUES (2,'192.168.2',1,1,1 and if(ascii(substr((select database()),1,1))=112,1,sleep(3)));#,NOW()) ;
@@ -40,7 +40,7 @@ INSERT INTO piwigo_rate (user_id,anonymous_id,element_id,rate,date) VALUES (2,'1
 
 这样就可以进行盲注了，如果上面的代码你看的比较乱的话，可以看下面简化后的代码：
 
-![4](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/4.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/4.png)
 
 ## 漏洞利用 
 
@@ -50,15 +50,15 @@ INSERT INTO piwigo_rate (user_id,anonymous_id,element_id,rate,date) VALUES (2,'1
 sqlmap -u "http://192.168.2.211/piwigo/picture.php?/1/category/1&action=rate" --data "rate=1" --dbs --batch
 ```
 
-![7](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/5.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/5.png)
 
 ## 修复建议
 
 可以看到这个漏洞的原因是弱类型比较问题，那么我们就可以使用强匹配进行修复。例如将 **in_array()** 函数的第三个参数设置为 **true** ，或者使用 **intval()** 函数将变量强转成数字，又或者使用正则匹配来处理变量。这里我将 **in_array()** 函数的第三个参数设置为 **true** ，代码及防护效果如下：
 
-![6](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/6.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/6.png)
 
-![7](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/7.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day1/files/7.png)
 
 
 ## 结语

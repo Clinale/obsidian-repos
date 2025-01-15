@@ -8,7 +8,7 @@
 
 题目叫做Twig，代码如下：
 
-![1](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/1.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/1.png)
 
 **漏洞解析** ：
 
@@ -38,11 +38,11 @@
 
 针对这两处的过滤，我们可以考虑使用 **javascript伪协议** 来绕过。为了让大家更好理解，请看下面的demo代码：
 
-![2](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/2.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/2.png)
 
 我们使用 **payload** ：`?nextSlide=javascript://comment％250aalert(1)` ，可以执行 **alert** 函数：
 
-![3](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/3.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/3.png)
 
 实际上，这里的 **//** 在JavaScript中表示单行注释，所以后面的内容均为注释，那为什么会执行 **alert** 函数呢？那是因为我们这里用了字符 **%0a** ，该字符为换行符，所以 **alert** 语句与注释符 **//** 就不在同一行，就能执行。当然，这里我们要对 **%** 百分号编码成 **%25** ，因为程序将浏览器发来的payload：`javascript://comment％250aalert(1)` 先解码成： `javascript://comment%0aalert(1)` 存储在变量 **$url** 中（上图第二行代码），然后用户点击a标签链接就会触发 **alert** 函数。
 
@@ -50,7 +50,7 @@
 
 本次实例分析，我们选取的是 **Anchor 0.9.2** 版本，在该版本中，当用户访问一个不存在的URL链接时，程序会调用404模板，而这个模板则存在XSS漏洞，具体代码如下：
 
-![4](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/4.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/4.png)
 
 该代码在 **themes\default\404.php** 中，看第4行 **code** 标签中的 **current_url** 函数，我们可在 **anchor\functions\helpers.php** 文件中，看到 **current_url** 函数是由 **Uri** 类的  **current** 方法实现的，具体代码如下：
 
@@ -62,15 +62,15 @@ function current_url() {
 
 我们跟进到 **Uri** 类，在 **system\uri.php** 文件中，我们发现这里调用了 **static::detect** 方法( **statci::** 是在PHP5.3版本之后引入的延迟静态绑定写法)。
 
-![5](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/5.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/5.png)
 
-在 **current** 方法下面，我们就可以找到 **detect** 方法，该方法会获取 **$_SERVER** 数组中的 **'REQUEST_URI' 、'PATH_INFO', 、'ORIG_PATH_INFO'** 三个键的值(下图第3-4行代码)，如果存在其中的某一个键，并且符合 **filter_var($uri, FILTER_SANITIZE_URL)** 和 **parse_url($uri, PHP_URL_PATH)** ，则直接将 **$uri** 传入 **static::format** 方法(下图第10-14行代码，具体代码如下：
+在 **current** 方法下面，我们就可以找到 **detect** 方法，该方法会获取 **\$_SERVER** 数组中的 **'REQUEST\_URI' 、'PATH\_INFO', 、'ORIG\_PATH\_INFO'** 三个键的值(下图第3-4行代码)，如果存在其中的某一个键，并且符合 **filter\_var($uri, FILTER_SANITIZE_URL)** 和 **parse_url($uri, PHP_URL_PATH)** ，则直接将 **$uri** 传入 **static::format** 方法(下图第10-14行代码，具体代码如下：
 
-![6](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/6.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/6.png)
 
 我们跟进 **static::format** 方法，可以发现程序过滤了三次(下图第3-7行)，但是都没有针对XSS攻击进行过滤，只是为了获取用户访问的文件名，具体代码如下：
 
-![7](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/7.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/7.png)
 
 由于没有针对XSS攻击进行过滤，导致攻击十分容易，我们来看看XSS攻击具体是如何进行的。
 
@@ -78,13 +78,13 @@ function current_url() {
 
 我们构造payload如下：  `http://localhost/anchor/index.php/<script>alert('www.sec-redclub.com')</script>` 。根据上面的分析，当我们访问这个并不存在的链接时，程序会调用404模板页面，然后调用 **current_url** 函数来获取当前用户访问的文件名，也就是最后一个 **/** 符号后面的内容，所以最终payload里的 `<script>alert('www.sec-redclub.com')</script>` 部分会嵌入到 `<code>` 标签中，造成XSS攻击，效果图如下：
 
-![8](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/8.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/8.png)
 
 ## 修复建议
 
 这对XSS漏洞，我们最好就是过滤关键词，将特殊字符进行HTML实体编码替换，这里给出的修复代码为Dedecms中防御XSS的方法，大家可以在 **uploads/include/helpers/filter.helper.php** 路径下找到对应代码，具体防护代码如下：
 
-![9](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/9.png)
+![](CTF%20总结/PHP-Audit-Labs/Part1/Day2/files/9.png)
 
 ## 结语
 
